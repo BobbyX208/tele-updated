@@ -2,13 +2,18 @@ import os
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from flask import Flask
+import threading
 
-# Load environment variables from .env
+# Initialize Flask server
+app = Flask(__name__)
+
+# Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
 
-# Start command
+# Telegram bot handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
         [InlineKeyboardButton("Request Mod", callback_data='request_mod')],
@@ -19,7 +24,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text('Please choose an option:', reply_markup=reply_markup)
 
-# Handle button clicks
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -37,7 +41,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(text="Send your message, and the admin will respond.")
         context.user_data['chatting_with_admin'] = True
 
-# Handle user messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_message = update.message.text
     user_id = update.message.chat_id
@@ -62,15 +65,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await context.bot.send_message(ADMIN_CHAT_ID, f"📩 *Message from @{username}*:\n{user_message}")
         await update.message.reply_text("Your message has been sent to the admin.")
 
-# Main function
-def main() -> None:
-    app = Application.builder().token(BOT_TOKEN).build()
+# Dummy Flask server to keep Koyeb happy
+@app.route('/')
+def health_check():
+    return "Bot is running"
 
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# Main function to run the bot and Flask server
+def run():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
 
-    app.run_polling()
+# Run Flask server in a separate thread
+def start_flask():
+    app.run(host='0.0.0.0', port=8000)
 
 if __name__ == '__main__':
-    main()
+    # Start the Flask server in a separate thread
+    threading.Thread(target=start_flask).start()
+    # Run the Telegram bot
+    run()
